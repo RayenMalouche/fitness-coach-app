@@ -195,6 +195,36 @@ fitness-coach-app/
 │
 └── README.md
 ```
+## 📸 Screenshots
+
+Below are some key screens from the application to give you a quick visual overview.
+
+### **Login Screen**
+![Login Screen](./screenshots/login.png)
+
+### **Register Screen**
+![Register Screen](./screenshots/register.png)
+
+### **Approval Pending (Client View)**
+![Approval Pending](./screenshots/pending%20approval%20after%20registration.png)
+
+### **Client Dashboard**
+![Client Dashboard](./screenshots/client%20dashboard.png)
+
+### **Client Dashboard with Uploaded Photo**
+![Client Uploaded Photo](./screenshots/booking.png)
+
+### **Coach Dashboard – Clients Tab**
+![Coach Clients](./screenshots/pending%20account%20approvals.png)
+
+### **Coach Dashboard – Sessions Tab**
+![Coach Sessions](./screenshots/creating%20available%20session%20dates.png)
+
+### **Coach Dashboard – Meal Plans Tab**
+![Coach Meal Plans](./screenshots/meal%20plan%20created%20for%20a%20client.png)
+
+### **Empty Meal Plan View**
+![Empty Meal Plan](./screenshots/empty%20meal%20plan.png)
 
 ## 🔑 API Endpoints
 
