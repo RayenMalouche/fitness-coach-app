@@ -1,83 +1,61 @@
-// Role-Based Access Control Middleware
-// Restricts routes based on user role and approval status
+// Main Express Server Configuration
+// Handles API routes, middleware, and server startup
 
-/**
- * Middleware to ensure user is a COACH
- */
-const isCoach = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+require('dotenv').config();
 
-  if (req.user.role !== 'COACH') {
-    return res.status(403).json({ error: 'Access denied. Coach role required.' });
-  }
+// Import routes
+const authRoutes = require('./routes/auth');
+const clientRoutes = require('./routes/clients');
+const sessionRoutes = require('./routes/sessions');
+const mealRoutes = require('./routes/meals');
+const photoRoutes = require('./routes/photos');
 
-  next();
-};
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-/**
- * Middleware to ensure user is a CLIENT
- */
-const isClient = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+// Middleware
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  if (req.user.role !== 'CLIENT') {
-    return res.status(403).json({ error: 'Access denied. Client role required.' });
-  }
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-  next();
-};
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Fitness Coach API is running' });
+});
 
-/**
- * Middleware to ensure user is an APPROVED CLIENT
- * Clients must be approved by coach before accessing most features
- */
-const isApprovedClient = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/meals', mealRoutes);
+app.use('/api/photos', photoRoutes);
 
-  if (req.user.role !== 'CLIENT') {
-    return res.status(403).json({ error: 'Access denied. Client role required.' });
-  }
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err.stack);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
 
-  if (!req.user.approved) {
-    return res.status(403).json({
-      error: 'Account pending approval',
-      message: 'Your account is awaiting coach approval. Please check back later.'
-    });
-  }
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
 
-  next();
-};
-
-/**
- * Middleware to allow both COACH and APPROVED CLIENT
- */
-const isCoachOrApprovedClient = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  const isValidCoach = req.user.role === 'COACH';
-  const isValidClient = req.user.role === 'CLIENT' && req.user.approved;
-
-  if (!isValidCoach && !isValidClient) {
-    return res.status(403).json({
-      error: 'Access denied',
-      message: 'This resource requires coach access or approved client status.'
-    });
-  }
-
-  next();
-};
-
-module.exports = {
-  isCoach,
-  isClient,
-  isApprovedClient,
-  isCoachOrApprovedClient
-};
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 API available at http://localhost:${PORT}/api`);
+  console.log(`📁 Uploads served at http://localhost:${PORT}/uploads`);
+});

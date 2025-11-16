@@ -1,6 +1,4 @@
-// Photo Upload Controller
-// Handles meal photo uploads from clients
-
+// backend/src/controllers/photoController.js
 const { PrismaClient } = require('@prisma/client');
 const multer = require('multer');
 const path = require('path');
@@ -8,84 +6,47 @@ const fs = require('fs');
 
 const prisma = new PrismaClient();
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+    cb(null, path.join(__dirname, '../uploads'));
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'meal-' + uniqueSuffix + path.extname(file.originalname));
+    cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
-
-const fileFilter = (req, file, cb) => {
-  // Accept images only
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed'), false);
-  }
-};
 
 const upload = multer({
   storage,
-  fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const mimetype = allowedTypes.test(file.mimetype);
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Only images are allowed'));
   }
 });
 
-/**
- * Upload a meal photo
- * CLIENT only (approved)
- */
+// Upload photo
 const uploadPhoto = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No image file provided' });
+      return res.status(400).json({ error: 'No image uploaded' });
     }
 
-    const { caption, coachId } = req.body;
-
-    // Validation
-    if (!coachId) {
-      return res.status(400).json({ error: 'Coach ID is required' });
-    }
-
-    // Verify coach exists
-    const coach = await prisma.user.findUnique({
-      where: { id: coachId, role: 'COACH' }
-    });
-
-    if (!coach) {
-      return res.status(404).json({ error: 'Coach not found' });
-    }
-
-    // Create photo record
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const { caption = '' } = req.body;
 
     const photo = await prisma.mealPhoto.create({
       data: {
         clientId: req.user.id,
-        coachId,
-        imageUrl,
-        caption: caption || null
-      },
-      include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
+        coachId: req.user.coachId || 1, // Assume coach ID, adjust as needed
+        imageUrl: `/uploads/${req.file.filename}`,
+        caption,
+        sentAt: new Date()
       }
     });
 
@@ -95,72 +56,21 @@ const uploadPhoto = async (req, res) => {
     });
   } catch (error) {
     console.error('Upload photo error:', error);
-
-    // Delete uploaded file if database operation fails
-    if (req.file) {
-      fs.unlink(path.join(uploadsDir, req.file.filename), (err) => {
-        if (err) console.error('Failed to delete file:', err);
-      });
-    }
-
+    if (req.file) fs.unlinkSync(req.file.path); // Clean up failed upload
     res.status(500).json({ error: 'Failed to upload photo' });
   }
 };
 
-/**
- * Get photos for a specific client
- * COACH can see any client's photos, CLIENT can only see their own
- */
-const getClientPhotos = async (req, res) => {
-  try {
-    let clientId;
-
-    // Determine which client's photos to fetch
-    if (req.user.role === 'COACH') {
-      clientId = req.params.clientId;
-    } else {
-      clientId = req.user.id;
-    }
-
-    const photos = await prisma.mealPhoto.findMany({
-      where: { clientId },
-      include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      },
-      orderBy: { sentAt: 'desc' }
-    });
-
-    res.json({ photos });
-  } catch (error) {
-    console.error('Get photos error:', error);
-    res.status(500).json({ error: 'Failed to fetch photos' });
-  }
-};
-
-/**
- * Get all photos for coach (from all clients)
- * COACH only
- */
+// Get all photos (for coach)
 const getAllPhotos = async (req, res) => {
   try {
     const photos = await prisma.mealPhoto.findMany({
-      where: { coachId: req.user.id },
+      orderBy: { sentAt: 'desc' },
       include: {
         client: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
+          select: { id: true, name: true, email: true }
         }
-      },
-      orderBy: { sentAt: 'desc' }
+      }
     });
 
     res.json({ photos });
@@ -170,9 +80,28 @@ const getAllPhotos = async (req, res) => {
   }
 };
 
-/**
- * Get single photo details
- */
+// Get client photos
+const getClientPhotos = async (req, res) => {
+  try {
+    const clientId = req.params.clientId ? req.params.clientId : req.user.id;
+
+    if (req.user.role === 'CLIENT' && clientId !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const photos = await prisma.mealPhoto.findMany({
+      where: { clientId },
+      orderBy: { sentAt: 'desc' }
+    });
+
+    res.json({ photos });
+  } catch (error) {
+    console.error('Get client photos error:', error);
+    res.status(500).json({ error: 'Failed to fetch photos' });
+  }
+};
+
+// Get single photo
 const getPhotoById = async (req, res) => {
   try {
     const { photoId } = req.params;
@@ -181,17 +110,7 @@ const getPhotoById = async (req, res) => {
       where: { id: photoId },
       include: {
         client: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        },
-        coach: {
-          select: {
-            id: true,
-            name: true
-          }
+          select: { id: true, name: true }
         }
       }
     });
@@ -200,12 +119,8 @@ const getPhotoById = async (req, res) => {
       return res.status(404).json({ error: 'Photo not found' });
     }
 
-    // Authorization check
-    const isAuthorized =
-      req.user.role === 'COACH' && photo.coachId === req.user.id ||
-      req.user.role === 'CLIENT' && photo.clientId === req.user.id;
-
-    if (!isAuthorized) {
+    // Check access
+    if (req.user.role === 'CLIENT' && photo.clientId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -216,10 +131,7 @@ const getPhotoById = async (req, res) => {
   }
 };
 
-/**
- * Delete a photo
- * Both CLIENT (own photos) and COACH can delete
- */
+// Delete photo
 const deletePhoto = async (req, res) => {
   try {
     const { photoId } = req.params;
@@ -232,24 +144,20 @@ const deletePhoto = async (req, res) => {
       return res.status(404).json({ error: 'Photo not found' });
     }
 
-    // Authorization check
-    const isAuthorized =
-      (req.user.role === 'COACH' && photo.coachId === req.user.id) ||
-      (req.user.role === 'CLIENT' && photo.clientId === req.user.id);
-
-    if (!isAuthorized) {
+    // Check access
+    if (req.user.role === 'CLIENT' && photo.clientId !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Delete file from disk
+    const filePath = path.join(__dirname, '../', photo.imageUrl);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
 
     // Delete from database
     await prisma.mealPhoto.delete({
       where: { id: photoId }
-    });
-
-    // Delete physical file
-    const filePath = path.join(__dirname, '..', photo.imageUrl);
-    fs.unlink(filePath, (err) => {
-      if (err) console.error('Failed to delete file:', err);
     });
 
     res.json({ message: 'Photo deleted successfully' });
@@ -262,8 +170,8 @@ const deletePhoto = async (req, res) => {
 module.exports = {
   upload,
   uploadPhoto,
-  getClientPhotos,
   getAllPhotos,
+  getClientPhotos,
   getPhotoById,
   deletePhoto
 };

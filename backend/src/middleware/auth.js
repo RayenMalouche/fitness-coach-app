@@ -1,83 +1,58 @@
-// Role-Based Access Control Middleware
-// Restricts routes based on user role and approval status
+// JWT Authentication Middleware
+// Verifies JWT tokens and attaches user data to request
+
+const jwt = require('jsonwebtoken');
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
 
 /**
- * Middleware to ensure user is a COACH
+ * Middleware to verify JWT token and attach user to request
  */
-const isCoach = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+const authenticate = async (req, res, next) => {
+  try {
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
 
-  if (req.user.role !== 'COACH') {
-    return res.status(403).json({ error: 'Access denied. Coach role required.' });
-  }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
 
-  next();
-};
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-/**
- * Middleware to ensure user is a CLIENT
- */
-const isClient = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-  if (req.user.role !== 'CLIENT') {
-    return res.status(403).json({ error: 'Access denied. Client role required.' });
-  }
-
-  next();
-};
-
-/**
- * Middleware to ensure user is an APPROVED CLIENT
- * Clients must be approved by coach before accessing most features
- */
-const isApprovedClient = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  if (req.user.role !== 'CLIENT') {
-    return res.status(403).json({ error: 'Access denied. Client role required.' });
-  }
-
-  if (!req.user.approved) {
-    return res.status(403).json({
-      error: 'Account pending approval',
-      message: 'Your account is awaiting coach approval. Please check back later.'
+    // Fetch user from database (exclude password)
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        approved: true,
+        createdAt: true
+      }
     });
-  }
 
-  next();
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Attach user to request object
+    req.user = user;
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+    console.error('Auth middleware error:', error);
+    return res.status(500).json({ error: 'Authentication failed' });
+  }
 };
 
-/**
- * Middleware to allow both COACH and APPROVED CLIENT
- */
-const isCoachOrApprovedClient = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
-  const isValidCoach = req.user.role === 'COACH';
-  const isValidClient = req.user.role === 'CLIENT' && req.user.approved;
-
-  if (!isValidCoach && !isValidClient) {
-    return res.status(403).json({
-      error: 'Access denied',
-      message: 'This resource requires coach access or approved client status.'
-    });
-  }
-
-  next();
-};
-
-module.exports = {
-  isCoach,
-  isClient,
-  isApprovedClient,
-  isCoachOrApprovedClient
-};
+module.exports = { authenticate };
