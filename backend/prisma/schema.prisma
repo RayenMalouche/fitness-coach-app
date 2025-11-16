@@ -1,0 +1,131 @@
+// Prisma Schema for Fitness Coach Application
+// This defines the database structure for user management, sessions, meals, and photos
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  COACH
+  CLIENT
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Main user table for both coaches and clients
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(CLIENT)
+  approved  Boolean  @default(false) // Clients need coach approval
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations for CLIENT role
+  sessionCredits    SessionCredit?
+  sessionBookings   SessionBooking[]
+  mealsAssigned     Meal[]
+  photosUploaded    MealPhoto[]       @relation("ClientPhotos")
+
+  // Relations for COACH role
+  availableSessions AvailableSession[]
+  mealsCreated      Meal[]             @relation("CoachMeals")
+  photosReceived    MealPhoto[]        @relation("CoachPhotos")
+
+  @@index([email])
+  @@index([role])
+}
+
+// Track session credits for each client
+model SessionCredit {
+  id           String   @id @default(uuid())
+  clientId     String   @unique
+  client       User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  totalCredits Int      @default(0) // Total credits purchased/assigned
+  usedCredits  Int      @default(0) // Credits already used
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+// Available time slots created by coach
+model AvailableSession {
+  id        String    @id @default(uuid())
+  coachId   String
+  coach     User      @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  dateTime  DateTime  // Start time of the session
+  duration  Int       @default(60) // Duration in minutes
+  isBooked  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relation to bookings
+  booking   SessionBooking?
+
+  @@index([coachId])
+  @@index([dateTime])
+  @@index([isBooked])
+}
+
+// Client bookings for sessions
+model SessionBooking {
+  id          String        @id @default(uuid())
+  clientId    String
+  client      User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sessionId   String        @unique
+  session     AvailableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  status      BookingStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([status])
+}
+
+// Meal plans assigned by coach to clients
+model Meal {
+  id           String    @id @default(uuid())
+  coachId      String
+  coach        User      @relation("CoachMeals", fields: [coachId], references: [id], onDelete: Cascade)
+  clientId     String
+  client       User      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title        String
+  description  String    @db.Text
+  imageUrl     String?   // Optional meal plan image
+  assignedDate DateTime  // Date this meal is assigned for
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([clientId])
+  @@index([coachId])
+  @@index([assignedDate])
+}
+
+// Photos uploaded by clients (meal tracking)
+model MealPhoto {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    User     @relation("ClientPhotos", fields: [clientId], references: [id], onDelete: Cascade)
+  coachId   String
+  coach     User     @relation("CoachPhotos", fields: [coachId], references: [id], onDelete: Cascade)
+  imageUrl  String   // Path to uploaded image
+  caption   String?  @db.Text // Optional caption from client
+  sentAt    DateTime @default(now())
+
+  @@index([clientId])
+  @@index([coachId])
+  @@index([sentAt])
+}
