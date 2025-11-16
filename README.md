@@ -47,7 +47,7 @@ A full-stack web application for fitness coaches to manage clients, sessions, me
 
 ### 1. Clone the Repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/RayenMalouche/fitness-coach-app.git
 cd fitness-coach-app
 ```
 
