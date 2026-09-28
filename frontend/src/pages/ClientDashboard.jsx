@@ -1,187 +1,176 @@
-// Client Dashboard Component
-// Main dashboard for clients with approval status and features
+// Athlete — your laps on the track, booking the next heat, today's fuel, and
+// your heats so far. Until the coach admits you, you wait at the start.
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { clientAPI, sessionAPI, mealAPI } from '../services/api';
-import Calendar from '../components/Calendar';
-import MealCard from '../components/MealCard';
-import PhotoUpload from '../components/PhotoUpload';
+import { useCallback, useEffect, useState } from 'react'
+import { Flag } from 'lucide-react'
+
+import Calendar from '../components/Calendar'
+import MealCard from '../components/MealCard'
+import PhotoUpload from '../components/PhotoUpload'
+import { AppShell, Loading, SectionHead } from '../components/track/app-shell'
+import { Bib } from '../components/track/bib'
+import { TrackOval } from '../components/track/track-oval'
+import { useAuth } from '../context/AuthContext'
+import { clientAPI, mealAPI, sessionAPI } from '../services/api'
+import { clock, day } from '../lib/format'
+
+const STATUS = {
+  APPROVED: { label: 'On', swatch: 'bg-infield' },
+  PENDING: { label: 'Awaiting coach', swatch: 'bg-flag' },
+  REJECTED: { label: 'Declined', swatch: 'bg-ink' },
+}
 
 export default function ClientDashboard() {
-  const { user, logout, refreshUser } = useAuth();
-  const [credits, setCredits] = useState(null);
-  const [todaysMeals, setTodaysMeals] = useState([]);
-  const [myBookings, setMyBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user, logout } = useAuth()
+  const [credits, setCredits] = useState(null)
+  const [todaysMeals, setTodaysMeals] = useState([])
+  const [myBookings, setMyBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const loadDashboardData = useCallback(async () => {
+    try {
+      const [creditsRes, mealsRes, bookingsRes] = await Promise.all([clientAPI.getMyCredits(), mealAPI.getTodaysMeals(), sessionAPI.getMyBookings()])
+      setCredits(creditsRes.data)
+      setTodaysMeals(mealsRes.data.meals)
+      setMyBookings(bookingsRes.data.bookings)
+    } catch (error) {
+      console.error('Failed to load dashboard:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    if (user?.approved) {
-      loadDashboardData();
-    } else {
-      setLoading(false);
-    }
-  }, [user]);
+    if (user?.approved) loadDashboardData()
+    else setLoading(false)
+  }, [user, loadDashboardData])
 
-  const loadDashboardData = async () => {
-    try {
-      const [creditsRes, mealsRes, bookingsRes] = await Promise.all([
-        clientAPI.getMyCredits(),
-        mealAPI.getTodaysMeals(),
-        sessionAPI.getMyBookings()
-      ]);
-
-      setCredits(creditsRes.data);
-      setTodaysMeals(mealsRes.data.meals);
-      setMyBookings(bookingsRes.data.bookings);
-    } catch (error) {
-      console.error('Failed to load dashboard:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // If not approved, show pending message
   if (!user?.approved) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
-          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">⏳</span>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Approval Pending</h2>
-          <p className="text-gray-600 mb-6">
-            Your account is awaiting approval from your coach. You'll receive access to all features once approved.
-          </p>
-          <button
-            onClick={logout}
-            className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">My Dashboard</h1>
-              <p className="text-sm text-gray-600 mt-1">Welcome back, {user?.name}</p>
+      <div className="flex min-h-screen flex-col">
+        <div className="lanes h-[34px]" aria-hidden />
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="max-w-md text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center bg-flag">
+              <Flag className="h-8 w-8" aria-hidden />
             </div>
-            <button
-              onClick={logout}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-            >
-              Logout
+            <p className="label mt-6">Yellow flag</p>
+            <h1 className="headline mt-1 text-5xl">Waiting at the start</h1>
+            <p className="mt-4 text-lg text-cinder">
+              Your coach hasn’t admitted you to the start list yet. Once they do, you can book heats and see your meal plan.
+            </p>
+            <div className="mt-6 flex justify-center">
+              <Bib id={user?.id} name={user?.name} />
+            </div>
+            <button type="button" onClick={logout} className="btn-ghost mt-8">
+              Leave
             </button>
           </div>
         </div>
-      </header>
+      </div>
+    )
+  }
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Credits Card */}
-        <div className="bg-gradient-to-r from-primary-500 to-primary-700 rounded-xl shadow-lg p-6 text-white mb-8">
-          <h3 className="text-lg font-semibold mb-2">Session Credits</h3>
-          <div className="flex items-baseline">
-            <span className="text-4xl font-bold">{credits?.remainingCredits || 0}</span>
-            <span className="text-xl ml-2 opacity-90">/ {credits?.totalCredits || 0}</span>
-          </div>
-          <p className="text-sm opacity-90 mt-2">
-            {credits?.usedCredits || 0} sessions completed
-          </p>
-        </div>
+  const total = credits?.totalCredits ?? 0
+  const used = credits?.usedCredits ?? 0
+  const left = credits?.remainingCredits ?? Math.max(0, total - used)
+  const upcoming = myBookings
+    .filter((b) => new Date(b.session.dateTime) >= new Date())
+    .sort((a, b) => new Date(a.session.dateTime) - new Date(b.session.dateTime))
+  const next = upcoming.find((b) => b.status === 'APPROVED')
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Calendar Section */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Book Sessions</h2>
-            <Calendar
-              remainingCredits={credits?.remainingCredits || 0}
-              onBookingComplete={loadDashboardData}
-            />
-          </div>
-
-          {/* Meals & Photos Section */}
-          <div className="space-y-8">
-            {/* Today's Meals */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Today's Meals</h2>
-              {todaysMeals.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">No meals assigned for today</p>
+  return (
+    <AppShell eyebrow={`Bib · ${user?.name}`} title="Your track" user={user} onLeave={logout}>
+      {loading ? (
+        <Loading />
+      ) : (
+        <div className="space-y-12">
+          {/* Laps */}
+          <section className="grid items-center gap-8 lg:grid-cols-[3fr_2fr]">
+            <TrackOval total={total} used={used} className="w-full" />
+            <div>
+              <p className="label">Session credits</p>
+              <p className="headline mt-1 text-6xl">
+                {left} <span className="text-3xl text-cinder">laps left</span>
+              </p>
+              <p className="mt-3 text-lg">
+                {used} of {total} run. Each approved session is one lap.
+              </p>
+              {next ? (
+                <p className="mt-6 border-l-4 border-infield bg-lane px-4 py-3">
+                  <span className="label block">Next heat</span>
+                  <span className="font-display text-2xl uppercase">
+                    {day(next.session.dateTime)} · {clock(next.session.dateTime)}
+                  </span>
+                </p>
               ) : (
-                <div className="space-y-4">
-                  {todaysMeals.map((meal) => (
-                    <MealCard key={meal.id} meal={meal} />
-                  ))}
-                </div>
+                <p className="mt-6 text-cinder">No heat booked yet — pick one below.</p>
               )}
             </div>
+          </section>
 
-            {/* Photo Upload */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Track Your Meals</h2>
-              <PhotoUpload />
+          <div className="lanes h-[22px]" aria-hidden />
+
+          <div className="grid gap-10 lg:grid-cols-2">
+            <section>
+              <SectionHead kicker="Book" title="Next heat" />
+              <div className="bg-lane p-5">
+                <Calendar remainingCredits={left} onBookingComplete={loadDashboardData} />
+              </div>
+            </section>
+
+            <div className="space-y-10">
+              <section>
+                <SectionHead kicker="Today" title="Fuel" />
+                {todaysMeals.length === 0 ? (
+                  <p className="border-2 border-dashed border-ink/15 px-6 py-8 text-center text-cinder">Nothing planned for today.</p>
+                ) : (
+                  <ul className="space-y-4">
+                    {todaysMeals.map((meal) => (
+                      <li key={meal.id}>
+                        <MealCard meal={meal} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section>
+                <SectionHead kicker="Log a meal" title="Send a photo" />
+                <div className="bg-lane p-5">
+                  <PhotoUpload />
+                </div>
+              </section>
             </div>
           </div>
-        </div>
 
-        {/* My Bookings */}
-        <div className="mt-8 bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">My Bookings</h2>
-          {myBookings.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No bookings yet</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead>
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date & Time
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {myBookings.map((booking) => (
-                    <tr key={booking.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {new Date(booking.session.dateTime).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          booking.status === 'APPROVED' 
-                            ? 'bg-green-100 text-green-800'
-                            : booking.status === 'PENDING'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {booking.status}
+          <section>
+            <SectionHead kicker="Your results" title="Heats" />
+            {myBookings.length === 0 ? (
+              <p className="border-2 border-dashed border-ink/15 px-6 py-8 text-center text-cinder">No heats yet.</p>
+            ) : (
+              <ol className="divide-y divide-ink/10 border-y-2 border-ink bg-lane">
+                {myBookings
+                  .slice()
+                  .sort((a, b) => new Date(b.session.dateTime) - new Date(a.session.dateTime))
+                  .map((booking) => {
+                    const status = STATUS[booking.status] ?? { label: booking.status, swatch: 'bg-cinder' }
+                    return (
+                      <li key={booking.id} className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3">
+                        <span className="min-w-[9rem] font-mono">{day(booking.session.dateTime)}</span>
+                        <span className="font-mono text-lg tabular-nums">{clock(booking.session.dateTime)}</span>
+                        <span className="ml-auto inline-flex items-center gap-2 text-sm font-semibold">
+                          <span className={`h-2.5 w-2.5 ${status.swatch}`} aria-hidden />
+                          {status.label}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      </li>
+                    )
+                  })}
+              </ol>
+            )}
+          </section>
         </div>
-      </div>
-    </div>
-  );
+      )}
+    </AppShell>
+  )
 }

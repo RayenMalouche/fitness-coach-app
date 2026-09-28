@@ -7,17 +7,15 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import CoachDashboard from './pages/CoachDashboard';
 import ClientDashboard from './pages/ClientDashboard';
+import { AnnouncerProvider } from './components/track/announcer';
+import { Loading } from './components/track/app-shell';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, requireRole }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <Loading />;
   }
 
   if (!user) {
@@ -36,11 +34,7 @@ const Home = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <Loading />;
   }
 
   if (!user) {
@@ -89,7 +83,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <AnnouncerProvider>
+        <AppRoutes />
+      </AnnouncerProvider>
     </AuthProvider>
   );
 }

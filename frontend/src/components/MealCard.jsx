@@ -1,26 +1,24 @@
-// Meal Card Component
-// Displays individual meal plan details
+// One meal on the plan, as a fuel-station card.
 
-export default function MealCard({ meal }) {
-  const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { API_ORIGIN, day } from '../lib/format'
 
+export default function MealCard({ meal, onDelete }) {
   return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-      {meal.imageUrl && (
-        <img
-          src={`${API_BASE}${meal.imageUrl}`}
-          alt={meal.title}
-          className="w-full h-48 object-cover rounded-lg mb-3"
-        />
-      )}
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{meal.title}</h3>
-      <p className="text-gray-600 text-sm mb-3">{meal.description}</p>
-      <div className="flex items-center text-xs text-gray-500">
-        <span>📅</span>
-        <span className="ml-2">
-          {new Date(meal.assignedDate).toLocaleDateString()}
-        </span>
+    <article className="flex h-full flex-col bg-lane">
+      <div className="flex items-center justify-between bg-infield px-4 py-2 text-lane">
+        <span className="font-mono text-xs uppercase tracking-[0.14em]">Fuel</span>
+        <span className="font-mono text-xs">{day(meal.assignedDate)}</span>
       </div>
-    </div>
-  );
+      {meal.imageUrl && <img src={`${API_ORIGIN}${meal.imageUrl}`} alt={meal.title} className="h-44 w-full object-cover" />}
+      <div className="flex flex-1 flex-col px-4 py-4">
+        <h3 className="headline text-2xl">{meal.title}</h3>
+        <p className="mt-2 flex-1 whitespace-pre-line text-cinder">{meal.description}</p>
+        {onDelete && (
+          <button type="button" onClick={onDelete} className="act-dq mt-4 self-start">
+            Remove
+          </button>
+        )}
+      </div>
+    </article>
+  )
 }
