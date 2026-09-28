@@ -1,142 +1,103 @@
-// Calendar Component for Session Booking
-// Displays available sessions and allows clients to book
+// Booking: a month of race days (days with open heats are marked), then the
+// open heats on the chosen day. Booking one asks the coach to approve it.
 
-import { useState, useEffect } from 'react';
-import ReactCalendar from 'react-calendar';
-import 'react-calendar/dist/Calendar.css';
-import { sessionAPI } from '../services/api';
+import { useEffect, useState } from 'react'
+import ReactCalendar from 'react-calendar'
+import 'react-calendar/dist/Calendar.css'
+
+import { useAnnouncer } from './track/announcer'
+import { sessionAPI } from '../services/api'
+import { clock, dayLong, errorText } from '../lib/format'
 
 export default function Calendar({ remainingCredits, onBookingComplete }) {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [availableSessions, setAvailableSessions] = useState([]);
-  const [selectedSession, setSelectedSession] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadAvailableSessions();
-  }, [selectedDate]);
+  const announce = useAnnouncer()
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [availableSessions, setAvailableSessions] = useState([])
+  const [bookingId, setBookingId] = useState(null)
 
   const loadAvailableSessions = async () => {
     try {
-      const response = await sessionAPI.getAvailable();
-      setAvailableSessions(response.data.sessions);
+      const response = await sessionAPI.getAvailable()
+      setAvailableSessions(response.data.sessions)
     } catch (error) {
-      console.error('Failed to load sessions:', error);
+      console.error('Failed to load sessions:', error)
     }
-  };
+  }
 
-  const getSessionsForDate = (date) => {
-    const dateStr = date.toDateString();
-    return availableSessions.filter(session => {
-      const sessionDate = new Date(session.dateTime);
-      return sessionDate.toDateString() === dateStr && !session.isBooked;
-    });
-  };
+  useEffect(() => {
+    loadAvailableSessions()
+  }, [])
 
-  const handleDateChange = (date) => {
-    setSelectedDate(date);
-  };
+  const openOn = (date) =>
+    availableSessions
+      .filter((s) => new Date(s.dateTime).toDateString() === date.toDateString() && !s.isBooked)
+      .sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime))
 
   const handleBookSession = async (session) => {
-    if (remainingCredits <= 0) {
-      alert('You have no remaining credits. Please contact your coach.');
-      return;
-    }
-
-    if (!confirm('Book this session? This will be pending coach approval.')) {
-      return;
-    }
-
-    setLoading(true);
+    if (remainingCredits <= 0) return announce('No laps left — ask your coach for more', 'stop')
+    setBookingId(session.id)
     try {
-      await sessionAPI.bookSession(session.id);
-      alert('Booking request sent! Awaiting coach approval.');
-      setSelectedSession(null);
-      await loadAvailableSessions();
-      if (onBookingComplete) onBookingComplete();
+      await sessionAPI.bookSession(session.id)
+      announce('Booked — waiting for your coach to approve', 'flag')
+      await loadAvailableSessions()
+      onBookingComplete?.()
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to book session');
+      announce(errorText(error, 'Could not book that heat'), 'stop')
     } finally {
-      setLoading(false);
+      setBookingId(null)
     }
-  };
+  }
 
-  const sessionsForSelectedDate = getSessionsForDate(selectedDate);
-
-  const tileClassName = ({ date, view }) => {
-    if (view === 'month') {
-      const sessions = getSessionsForDate(date);
-      if (sessions.length > 0) {
-        return 'has-sessions';
-      }
-    }
-    return null;
-  };
+  const heats = openOn(selectedDate)
 
   return (
-    <div>
+    <div className="track-calendar">
       <style>{`
-        .has-sessions {
-          background-color: #e0f2fe !important;
-          font-weight: bold;
-        }
-        .react-calendar {
-          width: 100%;
-          border: none;
-          font-family: inherit;
-        }
-        .react-calendar__tile--active {
-          background: #0ea5e9 !important;
-          color: white;
-        }
-        .react-calendar__tile--hover {
-          background: #f0f9ff;
-        }
+        .track-calendar .react-calendar { width: 100%; border: 0; background: transparent; font-family: inherit; }
+        .track-calendar .react-calendar__navigation button { font-family: Anton, Impact, sans-serif; font-size: 1.25rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        .track-calendar .react-calendar__month-view__weekdays abbr { text-decoration: none; font-family: "Chivo Mono", monospace; font-size: 0.65rem; color: #6B6660; }
+        .track-calendar .react-calendar__tile { position: relative; padding: 0.8em 0.2em; font-family: "Chivo Mono", monospace; border-radius: 0; }
+        .track-calendar .react-calendar__tile:enabled:hover { background: #fff; }
+        .track-calendar .react-calendar__tile--now { background: transparent; box-shadow: inset 0 -3px 0 #16181B; }
+        .track-calendar .react-calendar__tile--active,
+        .track-calendar .react-calendar__tile--active:enabled:hover,
+        .track-calendar .react-calendar__tile--active:enabled:focus { background: #16181B; color: #fff; }
+        .track-calendar .has-heats::after { content: ''; position: absolute; left: 50%; bottom: 0.35em; width: 1.2em; height: 3px; margin-left: -0.6em; background: #C9472E; }
+        .track-calendar .react-calendar__tile:disabled { background: transparent; color: #6B666066; }
       `}</style>
 
       <ReactCalendar
-        onChange={handleDateChange}
+        onChange={setSelectedDate}
         value={selectedDate}
-        tileClassName={tileClassName}
+        tileClassName={({ date, view }) => (view === 'month' && openOn(date).length ? 'has-heats' : null)}
         minDate={new Date()}
-        className="mb-6 shadow-sm rounded-lg"
       />
 
       <div className="mt-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">
-          Available Sessions for {selectedDate.toLocaleDateString()}
-        </h3>
-
-        {sessionsForSelectedDate.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No available sessions for this date</p>
+        <h3 className="font-display text-xl uppercase tracking-wide">{dayLong(selectedDate)}</h3>
+        {heats.length === 0 ? (
+          <p className="mt-2 text-cinder">No open heats this day. Days with a red bar have some.</p>
         ) : (
-          <div className="space-y-2">
-            {sessionsForSelectedDate.map((session) => (
-              <div
-                key={session.id}
-                className="flex justify-between items-center p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
-              >
-                <div>
-                  <p className="font-medium text-gray-900">
-                    {new Date(session.dateTime).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                  <p className="text-sm text-gray-600">{session.duration} minutes</p>
-                </div>
+          <ol className="mt-3 divide-y divide-ink/10 border-y-2 border-ink">
+            {heats.map((session, i) => (
+              <li key={session.id} className="flex items-center gap-4 py-3">
+                <span className="w-6 font-display text-xl text-cinder">{i + 1}</span>
+                <span className="whitespace-nowrap font-mono text-lg tabular-nums">{clock(session.dateTime)}</span>
+                <span className="flex-1 font-mono text-sm text-cinder">{session.duration} min</span>
                 <button
+                  type="button"
                   onClick={() => handleBookSession(session)}
-                  disabled={loading || remainingCredits <= 0}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={bookingId != null || remainingCredits <= 0}
+                  className="btn-go px-4 py-2 text-base"
                 >
-                  Book
+                  {bookingId === session.id ? 'Booking…' : 'Book'}
                 </button>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         )}
+        {remainingCredits <= 0 && <p className="mt-3 text-sm text-cinder">You have no laps left. Your coach can add more.</p>}
       </div>
     </div>
-  );
+  )
 }

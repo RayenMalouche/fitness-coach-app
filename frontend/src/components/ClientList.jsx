@@ -1,236 +1,181 @@
-// Client List Component for Coach
-// Displays all clients with approval and credit management
+// The roster: athletes waiting to be admitted, then everyone on the start list
+// wearing their bib, with their laps (session credits) on a small track.
 
-import { useState, useEffect } from 'react';
-import { clientAPI } from '../services/api';
+import { useEffect, useState } from 'react'
 
-export default function ClientList() {
-  const [clients, setClients] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedClient, setSelectedClient] = useState(null);
-  const [creditAmount, setCreditAmount] = useState('');
+import { useAnnouncer } from './track/announcer'
+import { Loading, SectionHead } from './track/app-shell'
+import { Bib } from './track/bib'
+import { TrackOval } from './track/track-oval'
+import { TiltCard } from './ui/tilt-card'
+import { clientAPI } from '../services/api'
+import { day, errorText } from '../lib/format'
 
-  useEffect(() => {
-    loadClients();
-  }, []);
+export default function ClientList({ onChange }) {
+  const announce = useAnnouncer()
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(null)
+  const [creditAmount, setCreditAmount] = useState('')
 
   const loadClients = async () => {
     try {
-      const response = await clientAPI.getAll();
-      setClients(response.data.clients);
+      const response = await clientAPI.getAll()
+      setClients(response.data.clients)
     } catch (error) {
-      console.error('Failed to load clients:', error);
+      console.error('Failed to load clients:', error)
+      announce('Could not load the roster', 'stop')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  const handleApprove = async (clientId) => {
-    try {
-      await clientAPI.approve(clientId);
-      await loadClients();
-    } catch (error) {
-      alert('Failed to approve client');
-    }
-  };
-
-  const handleReject = async (clientId) => {
-    if (!confirm('Are you sure you want to reject this client? This will delete their account.')) {
-      return;
-    }
-    try {
-      await clientAPI.reject(clientId);
-      await loadClients();
-    } catch (error) {
-      alert('Failed to reject client');
-    }
-  };
-
-  const handleUpdateCredits = async (e) => {
-    e.preventDefault();
-    if (!selectedClient || !creditAmount) return;
-
-    try {
-      await clientAPI.updateCredits(selectedClient.id, parseInt(creditAmount));
-      setSelectedClient(null);
-      setCreditAmount('');
-      await loadClients();
-    } catch (error) {
-      alert('Failed to update credits');
-    }
-  };
-
-  const pendingClients = clients.filter(c => !c.approved);
-  const approvedClients = clients.filter(c => c.approved);
-
-  if (loading) {
-    return <div className="text-center py-8">Loading clients...</div>;
   }
 
+  useEffect(() => {
+    loadClients()
+  }, [])
+
+  const refresh = async () => {
+    await loadClients()
+    onChange?.()
+  }
+
+  const handleApprove = async (client) => {
+    try {
+      await clientAPI.approve(client.id)
+      announce(`${client.name} is on the start list`)
+      await refresh()
+    } catch (error) {
+      announce(errorText(error, 'Could not admit athlete'), 'stop')
+    }
+  }
+
+  const handleReject = async (client) => {
+    if (!confirm(`Turn away ${client.name}? This deletes their account.`)) return
+    try {
+      await clientAPI.reject(client.id)
+      announce(`${client.name} turned away`, 'flag')
+      await refresh()
+    } catch (error) {
+      announce(errorText(error, 'Could not turn athlete away'), 'stop')
+    }
+  }
+
+  const handleUpdateCredits = async (e) => {
+    e.preventDefault()
+    if (!editing || creditAmount === '') return
+    try {
+      await clientAPI.updateCredits(editing.id, parseInt(creditAmount, 10))
+      announce(`${editing.name}: ${creditAmount} laps`)
+      setEditing(null)
+      setCreditAmount('')
+      await refresh()
+    } catch (error) {
+      announce(errorText(error, 'Could not update laps'), 'stop')
+    }
+  }
+
+  if (loading) return <Loading label="Calling the roster…" />
+
+  const pendingClients = clients.filter((c) => !c.approved)
+  const approvedClients = clients.filter((c) => c.approved)
+
   return (
-    <div className="space-y-8">
-      {/* Pending Clients */}
+    <div className="space-y-12">
       {pendingClients.length > 0 && (
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Pending Approval</h2>
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Joined
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {pendingClients.map((client) => (
-                  <tr key={client.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{client.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{client.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">
-                        {new Date(client.createdAt).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleApprove(client.id)}
-                        className="text-green-600 hover:text-green-900 mr-4"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleReject(client.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <section>
+          <SectionHead kicker="Yellow flag" title={`Awaiting the starter · ${pendingClients.length}`} />
+          <ul className="divide-y-2 divide-ink/10 border-y-2 border-ink/10 bg-lane">
+            {pendingClients.map((client) => (
+              <li key={client.id} className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-4">
+                <span className="h-10 w-1.5 bg-flag" aria-hidden />
+                <div className="min-w-[12rem] flex-1">
+                  <p className="text-lg font-semibold">{client.name}</p>
+                  <p className="truncate text-sm text-cinder">
+                    {client.email} · registered {day(client.createdAt)}
+                  </p>
+                </div>
+                <div className="flex gap-5">
+                  <button type="button" onClick={() => handleApprove(client)} className="act-go">
+                    Admit
+                  </button>
+                  <button type="button" onClick={() => handleReject(client)} className="act-dq">
+                    Turn away
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
-      {/* Approved Clients */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Approved Clients</h2>
+      <section>
+        <SectionHead kicker="Start list" title={`Athletes · ${approvedClients.length}`} />
         {approvedClients.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No approved clients yet</p>
+          <p className="border-2 border-dashed border-ink/15 px-6 py-10 text-center text-cinder">
+            Nobody on the start list yet. Admit an athlete above once they register.
+          </p>
         ) : (
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Credits
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {approvedClients.map((client) => (
-                  <tr key={client.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{client.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{client.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {client.sessionCredits
-                          ? `${client.sessionCredits.totalCredits - client.sessionCredits.usedCredits} / ${client.sessionCredits.totalCredits}`
-                          : '0 / 0'
-                        }
+          <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {approvedClients.map((client) => {
+              const total = client.sessionCredits?.totalCredits ?? 0
+              const used = client.sessionCredits?.usedCredits ?? 0
+              const isEditing = editing?.id === client.id
+              return (
+                <li key={client.id}>
+                  <TiltCard max={6} className="h-full bg-lane p-5 shadow-[0_1px_0_rgba(22,24,27,0.06)]">
+                    <div className="flex items-start gap-4">
+                      <Bib id={client.id} name={client.name} />
+                      <div className="min-w-0 pt-1">
+                        <p className="text-xl font-semibold leading-tight">{client.name}</p>
+                        <p className="mt-1 truncate text-sm text-cinder">{client.email}</p>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => {
-                          setSelectedClient(client);
-                          setCreditAmount(client.sessionCredits?.totalCredits?.toString() || '0');
-                        }}
-                        className="text-primary-600 hover:text-primary-900"
-                      >
-                        Set Credits
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                    <TrackOval total={total} used={used} size="sm" className="mt-5 w-full" />
+                    {isEditing ? (
+                      <form onSubmit={handleUpdateCredits} className="mt-4 flex items-end gap-3">
+                        <label className="flex-1">
+                          <span className="label mb-1 block">Total laps</span>
+                          <input
+                            type="number"
+                            min={used}
+                            value={creditAmount}
+                            onChange={(e) => setCreditAmount(e.target.value)}
+                            className="field py-2"
+                            autoFocus
+                            required
+                          />
+                        </label>
+                        <button type="submit" className="btn-go px-4 py-2 text-base">
+                          Save
+                        </button>
+                        <button type="button" onClick={() => setEditing(null)} className="act-dq pb-3">
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="mt-4 flex items-center justify-between">
+                        <p className="font-mono text-xs text-cinder">
+                          {used} run · {Math.max(0, total - used)} left
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditing(client)
+                            setCreditAmount(String(total))
+                          }}
+                          className="act-go"
+                        >
+                          Set laps
+                        </button>
+                      </div>
+                    )}
+                  </TiltCard>
+                </li>
+              )
+            })}
+          </ul>
         )}
-      </div>
-
-      {/* Credit Modal */}
-      {selectedClient && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              Set Credits for {selectedClient.name}
-            </h3>
-            <form onSubmit={handleUpdateCredits}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Total Session Credits
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={creditAmount}
-                  onChange={(e) => setCreditAmount(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="Enter number of credits"
-                  required
-                />
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  type="submit"
-                  className="flex-1 bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition"
-                >
-                  Update Credits
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedClient(null);
-                    setCreditAmount('');
-                  }}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      </section>
     </div>
-  );
+  )
 }

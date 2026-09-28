@@ -2,87 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
-}
-/*
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@layer base {
+  body {
+    @apply bg-chalk font-sans text-ink antialiased;
   }
-  a:hover {
-    color: #747bff;
+
+  ::selection {
+    @apply bg-flag text-ink;
   }
-  button {
-    background-color: #f9f9f9;
+
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-tartan;
   }
 }
 
- */
+@layer components {
+  /* Timing-board label: small mono caps. */
+  .label {
+    @apply font-mono text-[0.7rem] uppercase tracking-[0.14em] text-cinder;
+  }
+
+  /* Section headline: condensed, uppercase, like a stadium board. */
+  .headline {
+    @apply font-display uppercase leading-[0.95] tracking-wide;
+  }
+
+  /* Tartan strip with white lane lines — the page's structural divider. */
+  .lanes {
+    background-color: #c9472e;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 10px, #fff 10px, #fff 12px);
+  }
+
+  .field {
+    @apply w-full border-2 border-ink/15 bg-lane px-4 py-3 text-base text-ink placeholder:text-cinder/60 focus:border-ink focus:outline-none;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-3 font-display text-lg uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-go {
+    @apply btn bg-tartan text-lane hover:bg-tartan-deep;
+  }
+  .btn-ghost {
+    @apply btn border-2 border-ink/20 text-ink hover:border-ink;
+  }
+
+  /* Text-only actions in lists. DQ (disqualify) is the destructive one. */
+  .act {
+    @apply font-mono text-xs uppercase tracking-[0.12em] underline decoration-2 underline-offset-4 transition-colors;
+  }
+  .act-go {
+    @apply act text-infield decoration-infield/30 hover:decoration-infield;
+  }
+  .act-dq {
+    @apply act text-ink decoration-ink/25 hover:decoration-ink;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

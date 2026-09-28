@@ -1,199 +1,172 @@
-// Meal Management Component for Coach
-// Create and assign meal plans to clients
+// Fuel: pick an athlete by their bib, then plan what they eat and when.
 
-import { useState, useEffect } from 'react';
-import { mealAPI, clientAPI } from '../services/api';
+import { useEffect, useState } from 'react'
+import { Plus } from 'lucide-react'
+
+import { useAnnouncer } from './track/announcer'
+import { SectionHead } from './track/app-shell'
+import { Bib } from './track/bib'
+import MealCard from './MealCard'
+import { clientAPI, mealAPI } from '../services/api'
+import { cn } from '../lib/cn'
+import { errorText } from '../lib/format'
 
 export default function MealManagement() {
-  const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState('');
-  const [meals, setMeals] = useState([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newMeal, setNewMeal] = useState({
-    title: '',
-    description: '',
-    assignedDate: ''
-  });
+  const announce = useAnnouncer()
+  const [clients, setClients] = useState([])
+  const [selectedClient, setSelectedClient] = useState('')
+  const [meals, setMeals] = useState([])
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [newMeal, setNewMeal] = useState({ title: '', description: '', assignedDate: '' })
 
   useEffect(() => {
-    loadClients();
-  }, []);
+    clientAPI
+      .getAll()
+      .then((response) => setClients(response.data.clients.filter((c) => c.approved)))
+      .catch((error) => {
+        console.error('Failed to load clients:', error)
+        announce('Could not load athletes', 'stop')
+      })
+  }, [announce])
+
+  const loadClientMeals = async (clientId = selectedClient) => {
+    try {
+      const response = await mealAPI.getClientMeals(clientId)
+      setMeals(response.data.meals)
+    } catch (error) {
+      console.error('Failed to load meals:', error)
+    }
+  }
 
   useEffect(() => {
-    if (selectedClient) {
-      loadClientMeals();
-    }
-  }, [selectedClient]);
-
-  const loadClients = async () => {
-    try {
-      const response = await clientAPI.getAll();
-      const approved = response.data.clients.filter(c => c.approved);
-      setClients(approved);
-    } catch (error) {
-      console.error('Failed to load clients:', error);
-    }
-  };
-
-  const loadClientMeals = async () => {
-    try {
-      const response = await mealAPI.getClientMeals(selectedClient);
-      setMeals(response.data.meals);
-    } catch (error) {
-      console.error('Failed to load meals:', error);
-    }
-  };
+    if (selectedClient) loadClientMeals(selectedClient)
+  }, [selectedClient])
 
   const handleCreateMeal = async (e) => {
-    e.preventDefault();
-    if (!selectedClient) {
-      alert('Please select a client first');
-      return;
-    }
-
+    e.preventDefault()
     try {
-      await mealAPI.create({
-        ...newMeal,
-        clientId: selectedClient
-      });
-      setNewMeal({ title: '', description: '', assignedDate: '' });
-      setShowCreateForm(false);
-      await loadClientMeals();
+      await mealAPI.create({ ...newMeal, clientId: selectedClient })
+      setNewMeal({ title: '', description: '', assignedDate: '' })
+      setShowCreateForm(false)
+      announce('Fuel planned')
+      await loadClientMeals()
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to create meal');
+      announce(errorText(error, 'Could not plan meal'), 'stop')
     }
-  };
+  }
 
-  const handleDeleteMeal = async (mealId) => {
-    if (!confirm('Delete this meal plan?')) return;
+  const handleDeleteMeal = async (meal) => {
+    if (!confirm(`Remove "${meal.title}"?`)) return
     try {
-      await mealAPI.delete(mealId);
-      await loadClientMeals();
+      await mealAPI.delete(meal.id)
+      announce('Meal removed', 'flag')
+      await loadClientMeals()
     } catch (error) {
-      alert('Failed to delete meal');
+      announce(errorText(error, 'Could not remove meal'), 'stop')
     }
-  };
+  }
+
+  const athlete = clients.find((c) => c.id === selectedClient)
+  const sorted = meals.slice().sort((a, b) => new Date(a.assignedDate) - new Date(b.assignedDate))
 
   return (
-    <div className="space-y-6">
-      {/* Client Selector */}
-      <div className="bg-white rounded-xl shadow p-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Select Client
-        </label>
-        <select
-          value={selectedClient}
-          onChange={(e) => setSelectedClient(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-        >
-          <option value="">-- Choose a client --</option>
-          {clients.map((client) => (
-            <option key={client.id} value={client.id}>
-              {client.name} ({client.email})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedClient && (
-        <>
-          {/* Create Meal Form */}
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Meal Plans</h2>
+    <div className="space-y-10">
+      <section>
+        <SectionHead kicker="Pick an athlete" title="Fuel station" />
+        {clients.length === 0 ? (
+          <p className="text-cinder">No athletes on the start list yet.</p>
+        ) : (
+          <div role="radiogroup" aria-label="Athlete" className="flex flex-wrap gap-4">
+            {clients.map((client) => (
               <button
-                onClick={() => setShowCreateForm(!showCreateForm)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                key={client.id}
+                type="button"
+                role="radio"
+                aria-checked={selectedClient === client.id}
+                onClick={() => {
+                  setSelectedClient(client.id)
+                  setShowCreateForm(false)
+                }}
+                className={cn(
+                  'flex flex-col items-center gap-2 p-2 transition',
+                  selectedClient === client.id ? 'bg-ink/5 outline outline-2 outline-tartan' : 'opacity-70 hover:opacity-100',
+                )}
               >
-                {showCreateForm ? 'Cancel' : '+ Create Meal Plan'}
+                <Bib id={client.id} name={client.name} />
+                <span className="text-sm font-semibold">{client.name}</span>
               </button>
-            </div>
+            ))}
+          </div>
+        )}
+      </section>
 
-            {showCreateForm && (
-              <form onSubmit={handleCreateMeal} className="bg-white rounded-xl shadow p-6 mb-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Meal Title
-                    </label>
-                    <input
-                      type="text"
-                      value={newMeal.title}
-                      onChange={(e) => setNewMeal({ ...newMeal, title: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="e.g., Protein-Rich Breakfast"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
-                    <textarea
-                      value={newMeal.description}
-                      onChange={(e) => setNewMeal({ ...newMeal, description: e.target.value })}
-                      rows="4"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Meal details, ingredients, portions..."
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Assigned Date
-                    </label>
-                    <input
-                      type="date"
-                      value={newMeal.assignedDate}
-                      onChange={(e) => setNewMeal({ ...newMeal, assignedDate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  className="mt-4 w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 transition"
-                >
-                  Create Meal Plan
+      {athlete && (
+        <section>
+          <SectionHead kicker={`Bib · ${athlete.name}`} title="Meal plan">
+            <button type="button" onClick={() => setShowCreateForm(!showCreateForm)} className={showCreateForm ? 'btn-ghost' : 'btn-go'}>
+              {showCreateForm ? 'Cancel' : (
+                <>
+                  <Plus className="h-5 w-5" aria-hidden /> Plan a meal
+                </>
+              )}
+            </button>
+          </SectionHead>
+
+          {showCreateForm && (
+            <form onSubmit={handleCreateMeal} className="mb-8 grid gap-4 bg-lane p-5 sm:grid-cols-[2fr_1fr]">
+              <label>
+                <span className="label mb-2 block !text-ink">Meal</span>
+                <input
+                  type="text"
+                  value={newMeal.title}
+                  onChange={(e) => setNewMeal({ ...newMeal, title: e.target.value })}
+                  className="field"
+                  placeholder="Protein-rich breakfast"
+                  required
+                />
+              </label>
+              <label>
+                <span className="label mb-2 block !text-ink">Day</span>
+                <input
+                  type="date"
+                  value={newMeal.assignedDate}
+                  onChange={(e) => setNewMeal({ ...newMeal, assignedDate: e.target.value })}
+                  className="field"
+                  required
+                />
+              </label>
+              <label className="sm:col-span-2">
+                <span className="label mb-2 block !text-ink">What and how much</span>
+                <textarea
+                  value={newMeal.description}
+                  onChange={(e) => setNewMeal({ ...newMeal, description: e.target.value })}
+                  rows={4}
+                  className="field"
+                  placeholder="Ingredients, portions, timing around the session…"
+                  required
+                />
+              </label>
+              <div className="sm:col-span-2">
+                <button type="submit" className="btn-go">
+                  Plan meal
                 </button>
-              </form>
-            )}
-          </div>
-
-          {/* Meals List */}
-          <div className="bg-white rounded-xl shadow p-6">
-            {meals.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No meals assigned yet</p>
-            ) : (
-              <div className="space-y-4">
-                {meals.map((meal) => (
-                  <div key={meal.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">{meal.title}</h3>
-                        <p className="text-gray-600 text-sm mb-3">{meal.description}</p>
-                        <div className="flex items-center text-xs text-gray-500">
-                          <span>📅</span>
-                          <span className="ml-2">
-                            {new Date(meal.assignedDate).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteMeal(meal.id)}
-                        className="ml-4 text-red-600 hover:text-red-800"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
-            )}
-          </div>
-        </>
+            </form>
+          )}
+
+          {sorted.length === 0 ? (
+            <p className="border-2 border-dashed border-ink/15 px-6 py-10 text-center text-cinder">No meals planned for {athlete.name} yet.</p>
+          ) : (
+            <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {sorted.map((meal) => (
+                <li key={meal.id}>
+                  <MealCard meal={meal} onDelete={() => handleDeleteMeal(meal)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
-  );
+  )
 }
